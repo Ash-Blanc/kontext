@@ -2,7 +2,7 @@ import { app, BrowserWindow } from "electron"
 import { initializeIpcHandlers } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
 import { ScreenshotHelper } from "./ScreenshotHelper"
-import { ShortcutsHelper } from "./shortcuts"
+import { ShortcutManager } from "./shortcuts"
 import { ProcessingHelper } from "./ProcessingHelper"
 
 export class AppState {
@@ -10,7 +10,7 @@ export class AppState {
 
   private windowHelper: WindowHelper
   private screenshotHelper: ScreenshotHelper
-  public shortcutsHelper: ShortcutsHelper
+  public shortcutsHelper: ShortcutManager
   public processingHelper: ProcessingHelper
 
   // View management
@@ -55,7 +55,7 @@ export class AppState {
     this.processingHelper = new ProcessingHelper(this)
 
     // Initialize ShortcutsHelper
-    this.shortcutsHelper = new ShortcutsHelper(this)
+    this.shortcutsHelper = new ShortcutManager(this)
   }
 
   public static getInstance(): AppState {
@@ -204,8 +204,8 @@ async function initializeApp() {
   app.whenReady().then(() => {
     console.log("App is ready")
     appState.createWindow()
-    // Register global shortcuts using ShortcutsHelper
-    appState.shortcutsHelper.registerGlobalShortcuts()
+    // Register global shortcuts using ShortcutManager
+    appState.shortcutsHelper.registerShortcuts()
   })
 
   app.on("activate", () => {

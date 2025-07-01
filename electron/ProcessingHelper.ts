@@ -1,7 +1,7 @@
 // ProcessingHelper.ts
 
 import { AppState } from "./main"
-import { LLMHelper, ClaudeModel } from "./LLMHelper"
+import { LLMHelper, GeminiModel } from "./LLMHelper"
 import dotenv from "dotenv"
 
 dotenv.config()
@@ -18,9 +18,9 @@ export class ProcessingHelper {
 
   constructor(appState: AppState) {
     this.appState = appState
-    const apiKey = process.env.CLAUDE_API_KEY
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
     if (!apiKey) {
-      throw new Error("CLAUDE_API_KEY not found in environment variables")
+      throw new Error("GEMINI_API_KEY or GOOGLE_API_KEY not found in environment variables")
     }
     this.llmHelper = new LLMHelper(apiKey)
   }
@@ -193,7 +193,7 @@ export class ProcessingHelper {
     return this.llmHelper;
   }
 
-  public setModel(model: ClaudeModel): void {
+  public setModel(model: GeminiModel): void {
     this.llmHelper.setModel(model)
     const mainWindow = this.appState.getMainWindow()
     if (mainWindow) {
@@ -205,27 +205,27 @@ export class ProcessingHelper {
   }
 
   public enableSpeedMode(): void {
-    console.log("[ProcessingHelper] Enabling speed mode - switching to Claude 3.5 Haiku")
-    this.setModel("claude-3-5-haiku-20241022")
+    console.log("[ProcessingHelper] Enabling speed mode - switching to Gemini 1.5 Flash")
+    this.setModel("gemini-1.5-flash-latest")
     this.llmHelper.setSpeedMode(true)
   }
 
   public disableSpeedMode(): void {
-    console.log("[ProcessingHelper] Disabling speed mode - switching to Claude 3.5 Sonnet")
-    this.setModel("claude-3-5-sonnet-20241022")
+    console.log("[ProcessingHelper] Disabling speed mode - switching to Gemini 1.5 Pro")
+    this.setModel("gemini-1.5-pro-latest")
     this.llmHelper.setSpeedMode(false)
   }
 
   public toggleSpeedMode(): void {
     const currentModel = this.getCurrentModel()
-    if (currentModel.includes('haiku')) {
+    if (currentModel.includes('flash')) {
       this.disableSpeedMode()
     } else {
       this.enableSpeedMode()
     }
   }
 
-  public getCurrentModel(): ClaudeModel {
+  public getCurrentModel(): GeminiModel {
     return this.llmHelper.getCurrentModel()
   }
 
