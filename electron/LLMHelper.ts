@@ -1,58 +1,50 @@
-import Anthropic from "@anthropic-ai/sdk"
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai"
 import fs from "fs"
 import sharp from "sharp"
 
-export type ClaudeModel = 
-  | "claude-3-5-sonnet-20241022" 
-  | "claude-3-5-haiku-20241022"
-  | "claude-3-opus-20240229"
-  | "claude-3-sonnet-20240229"
-  | "claude-3-haiku-20240307"
-  | "claude-3-7-sonnet-20250219"
-  | "claude-sonnet-4-20250514"
-  | "claude-opus-4-20250514"
+export type GeminiModel = 
+  | "gemini-2.0-flash-exp" 
+  | "gemini-1.5-pro-latest"
+  | "gemini-1.5-flash-latest"
+  | "gemini-1.5-flash"
+  | "gemini-1.5-pro"
+  | "gemini-1.0-pro"
 
 export class LLMHelper {
-  private client: Anthropic
-  private currentModel: ClaudeModel = "claude-3-5-sonnet-20241022"
+  private client: GoogleGenerativeAI
+  private currentModel: GeminiModel = "gemini-1.5-flash-latest"
   private readonly systemPrompt = `You are Wingman AI, a helpful assistant. For any input, provide a clear problem analysis and concise actionable suggestions. Be direct and efficient.`
 
   constructor(apiKey: string) {
-    this.client = new Anthropic({
-      apiKey: apiKey,
-    })
+    this.client = new GoogleGenerativeAI(apiKey)
   }
 
-  public setModel(model: ClaudeModel): void {
+  public setModel(model: GeminiModel): void {
     this.currentModel = model
     console.log(`[LLMHelper] Switched to model: ${model}`)
   }
 
-  public getCurrentModel(): ClaudeModel {
+  public getCurrentModel(): GeminiModel {
     return this.currentModel
   }
 
-  public getModelDisplayName(model?: ClaudeModel): string {
+  public getModelDisplayName(model?: GeminiModel): string {
     const modelToCheck = model || this.currentModel
     switch (modelToCheck) {
-      case "claude-3-5-sonnet-20241022":
-        return "Claude 3.5 Sonnet"
-      case "claude-3-5-haiku-20241022":
-        return "Claude 3.5 Haiku"
-      case "claude-3-opus-20240229":
-        return "Claude 3 Opus"
-      case "claude-3-sonnet-20240229":
-        return "Claude 3 Sonnet"
-      case "claude-3-haiku-20240307":
-        return "Claude 3 Haiku"
-      case "claude-3-7-sonnet-20250219":
-        return "Claude 3.7 Sonnet"
-      case "claude-sonnet-4-20250514":
-        return "Claude Sonnet 4"
-      case "claude-opus-4-20250514":
-        return "Claude Opus 4"
+      case "gemini-2.0-flash-exp":
+        return "Gemini 2.0 Flash Experimental"
+      case "gemini-1.5-pro-latest":
+        return "Gemini 1.5 Pro"
+      case "gemini-1.5-flash-latest":
+        return "Gemini 1.5 Flash"
+      case "gemini-1.5-flash":
+        return "Gemini 1.5 Flash"
+      case "gemini-1.5-pro":
+        return "Gemini 1.5 Pro"
+      case "gemini-1.0-pro":
+        return "Gemini 1.0 Pro"
       default:
-        return "Claude 3.5 Sonnet"
+        return "Gemini 1.5 Flash"
     }
   }
 
@@ -103,31 +95,47 @@ export class LLMHelper {
     }
   }
 
-  private getOptimalTokenLimit(model: ClaudeModel): number {
+  private getOptimalTokenLimit(model: GeminiModel): number {
     // Use smaller token limits for faster responses
-    if (model.includes('haiku')) return 1024
-    if (model.includes('3.5')) return 2048
-    return 3072
+    if (model.includes('flash')) return 2048
+    if (model.includes('1.5')) return 3072
+    return 4096
   }
 
-  private getOptimalModel(): ClaudeModel {
+  private getOptimalModel(): GeminiModel {
     // Auto-select fastest model for better performance
-    return "claude-3-5-haiku-20241022"
+    return "gemini-1.5-flash-latest"
   }
 
   public async extractProblemFromImages(imagePaths: string[]) {
     try {
+      const model = this.client.getGenerativeModel({ 
+        model: this.currentModel,
+        safetySettings: [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: this.getOptimalTokenLimit(this.currentModel),
+          temperature: 0.1,
+        }
+      })
+
       const imageContents = await Promise.all(imagePaths.map(async (path) => {
         const originalImageData = await fs.promises.readFile(path)
         const compressedImageData = await this.compressImage(originalImageData)
         const mimeType = this.detectImageMimeType(compressedImageData)
         console.log(`[LLMHelper] Compressed image ${path}: ${originalImageData.length} -> ${compressedImageData.length} bytes`)
         return {
-          type: "image" as const,
-          source: {
-            type: "base64" as const,
-            media_type: "image/jpeg" as const, // Always JPEG after compression
-            data: compressedImageData.toString("base64")
+          inlineData: {
+            data: compressedImageData.toString("base64"),
+            mimeType: mimeType
           }
         }
       }))
@@ -142,28 +150,15 @@ export class LLMHelper {
 }
 Return ONLY the JSON object.`
 
-      const optimalModel = this.currentModel.includes('haiku') ? this.currentModel : this.getOptimalModel()
-      const tokenLimit = this.getOptimalTokenLimit(optimalModel)
+      const result = await model.generateContent([
+        prompt,
+        ...imageContents
+      ])
+      const response = await result.response
+      const text = response.text()
 
-      const message = await this.client.messages.create({
-        model: optimalModel,
-        max_tokens: tokenLimit,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: prompt
-              },
-              ...imageContents
-            ]
-          }
-        ]
-      })
-
-      const text = this.cleanJsonResponse(message.content[0].type === 'text' ? message.content[0].text : '')
-      return JSON.parse(text)
+      const cleanedText = this.cleanJsonResponse(text)
+      return JSON.parse(cleanedText)
     } catch (error) {
       console.error("Error extracting problem from images:", error)
       throw error
@@ -187,24 +182,33 @@ Provide solution in JSON:
 }
 Return ONLY the JSON.`
 
-    console.log("[LLMHelper] Calling Claude LLM for solution...");
+    console.log("[LLMHelper] Calling Gemini LLM for solution...");
     try {
-      const tokenLimit = this.getOptimalTokenLimit(this.currentModel)
-      
-      const message = await this.client.messages.create({
+      const model = this.client.getGenerativeModel({ 
         model: this.currentModel,
-        max_tokens: tokenLimit,
-        messages: [
+        safetySettings: [
           {
-            role: "user",
-            content: prompt
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
           }
-        ]
+        ],
+        generationConfig: {
+          maxOutputTokens: this.getOptimalTokenLimit(this.currentModel),
+          temperature: 0.1,
+        }
       })
 
-      console.log("[LLMHelper] Claude LLM returned result.");
-      const text = this.cleanJsonResponse(message.content[0].type === 'text' ? message.content[0].text : '')
-      const parsed = JSON.parse(text)
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      const text = response.text()
+
+      console.log("[LLMHelper] Gemini LLM returned result.");
+      const cleanedText = this.cleanJsonResponse(text)
+      const parsed = JSON.parse(cleanedText)
       console.log("[LLMHelper] Parsed LLM response:", parsed)
       return parsed
     } catch (error) {
@@ -222,16 +226,32 @@ Return ONLY the JSON.`
 
   public async debugSolutionWithImages(problemInfo: any, currentCode: string, debugImagePaths: string[]) {
     try {
+      const model = this.client.getGenerativeModel({ 
+        model: this.currentModel,
+        safetySettings: [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: this.getOptimalTokenLimit(this.currentModel),
+          temperature: 0.1,
+        }
+      })
+
       const imageContents = await Promise.all(debugImagePaths.map(async (path) => {
         const originalImageData = await fs.promises.readFile(path)
         const compressedImageData = await this.compressImage(originalImageData)
         console.log(`[LLMHelper] Compressed debug image ${path}: ${originalImageData.length} -> ${compressedImageData.length} bytes`)
         return {
-          type: "image" as const,
-          source: {
-            type: "base64" as const,
-            media_type: this.detectImageMimeType(compressedImageData) as "image/png" | "image/jpeg" | "image/gif" | "image/webp",
-            data: compressedImageData.toString('base64')
+          inlineData: {
+            data: compressedImageData.toString('base64'),
+            mimeType: this.detectImageMimeType(compressedImageData)
           }
         }
       }))
@@ -259,23 +279,16 @@ Please analyze the debug images and provide an improved solution in the followin
 
 Important: Return ONLY the JSON object, without any markdown formatting or code blocks.`
 
-      console.log("[LLMHelper] Calling Claude LLM for debug analysis...")
-      const message = await this.client.messages.create({
-        model: this.currentModel,
-        max_tokens: this.getOptimalTokenLimit(this.currentModel),
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              ...imageContents
-            ]
-          }
-        ]
-      })
+      console.log("[LLMHelper] Calling Gemini LLM for debug analysis...")
+      const result = await model.generateContent([
+        prompt,
+        ...imageContents
+      ])
+      const response = await result.response
+      const text = response.text()
 
-      const text = message.content[0].type === 'text' ? message.content[0].text : ''
-      const parsed = JSON.parse(text)
+      const cleanedText = this.cleanJsonResponse(text)
+      const parsed = JSON.parse(cleanedText)
       console.log("[LLMHelper] Parsed debug LLM response:", parsed)
       return parsed
     } catch (error) {
@@ -286,6 +299,24 @@ Important: Return ONLY the JSON object, without any markdown formatting or code 
 
   public async analyzeErrorText(problemInfo: any, currentCode: string, errorText: string) {
     try {
+      const model = this.client.getGenerativeModel({ 
+        model: this.currentModel,
+        safetySettings: [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: this.getOptimalTokenLimit(this.currentModel),
+          temperature: 0.1,
+        }
+      })
+
       const prompt = `${this.systemPrompt}
 
 Given this problem context:
@@ -320,20 +351,13 @@ Focus on:
 
 Important: Return ONLY the JSON object, without any markdown formatting or code blocks.`
 
-      console.log("[LLMHelper] Calling Claude LLM for error analysis...")
-      const message = await this.client.messages.create({
-        model: this.currentModel,
-        max_tokens: this.getOptimalTokenLimit(this.currentModel),
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ]
-      })
+      console.log("[LLMHelper] Calling Gemini LLM for error analysis...")
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      const text = response.text()
 
-      const text = message.content[0].type === 'text' ? message.content[0].text : ''
-      const parsed = JSON.parse(text)
+      const cleanedText = this.cleanJsonResponse(text)
+      const parsed = JSON.parse(cleanedText)
       console.log("[LLMHelper] Parsed error analysis response:", parsed)
       return parsed
     } catch (error) {
@@ -344,22 +368,22 @@ Important: Return ONLY the JSON object, without any markdown formatting or code 
 
   public async analyzeAudioFile(audioPath: string) {
     try {
-      // Note: Claude doesn't support audio directly, so we'll need to handle this differently
+      // Note: Gemini doesn't support audio directly, so we'll need to handle this differently
       // For now, we'll return a placeholder response
-      const prompt = `${this.systemPrompt}\n\nI need to analyze an audio file, but Claude doesn't support audio input directly. Please provide a general response about audio analysis limitations and suggest alternative approaches.`;
-      
-      const message = await this.client.messages.create({
+      const model = this.client.getGenerativeModel({ 
         model: this.currentModel,
-        max_tokens: 1024,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ]
+        generationConfig: {
+          maxOutputTokens: 1024,
+          temperature: 0.1,
+        }
       })
 
-      const text = message.content[0].type === 'text' ? message.content[0].text : 'Unable to analyze audio file.'
+      const prompt = `${this.systemPrompt}\n\nI need to analyze an audio file, but Gemini doesn't support audio input directly. Please provide a general response about audio analysis limitations and suggest alternative approaches.`;
+      
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      const text = response.text()
+
       return { text, timestamp: Date.now() };
     } catch (error) {
       console.error("Error analyzing audio file:", error);
@@ -369,21 +393,21 @@ Important: Return ONLY the JSON object, without any markdown formatting or code 
 
   public async analyzeAudioFromBase64(data: string, mimeType: string) {
     try {
-      // Note: Claude doesn't support audio directly, so we'll need to handle this differently
-      const prompt = `${this.systemPrompt}\n\nI need to analyze audio data, but Claude doesn't support audio input directly. Please provide a general response about audio analysis limitations and suggest alternative approaches.`;
-      
-      const message = await this.client.messages.create({
+      // Note: Gemini doesn't support audio directly, so we'll need to handle this differently
+      const model = this.client.getGenerativeModel({ 
         model: this.currentModel,
-        max_tokens: 1024,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ]
+        generationConfig: {
+          maxOutputTokens: 1024,
+          temperature: 0.1,
+        }
       })
 
-      const text = message.content[0].type === 'text' ? message.content[0].text : 'Unable to analyze audio data.'
+      const prompt = `${this.systemPrompt}\n\nI need to analyze audio data, but Gemini doesn't support audio input directly. Please provide a general response about audio analysis limitations and suggest alternative approaches.`;
+      
+      const result = await model.generateContent(prompt)
+      const response = await result.response
+      const text = response.text()
+
       return { text, timestamp: Date.now() };
     } catch (error) {
       console.error("Error analyzing audio from base64:", error);
@@ -396,33 +420,39 @@ Important: Return ONLY the JSON object, without any markdown formatting or code 
       const imageData = await fs.promises.readFile(imagePath);
       const mimeType = this.detectImageMimeType(imageData)
       console.log(`[LLMHelper] Detected mime type for ${imagePath}: ${mimeType}`)
-      const prompt = `${this.systemPrompt}\n\nDescribe the content of this image in a short, concise answer. In addition to your main answer, suggest several possible actions or responses the user could take next based on the image. Do not return a structured JSON object, just answer naturally as you would to a user. Be concise and brief.`;
       
-      const message = await this.client.messages.create({
+      const model = this.client.getGenerativeModel({ 
         model: this.currentModel,
-        max_tokens: 1024,
-        messages: [
+        safetySettings: [
           {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: prompt
-              },
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-                  data: imageData.toString("base64")
-                }
-              }
-            ]
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
           }
-        ]
+        ],
+        generationConfig: {
+          maxOutputTokens: 1024,
+          temperature: 0.1,
+        }
       })
 
-      const text = message.content[0].type === 'text' ? message.content[0].text : 'Unable to analyze image.'
+      const prompt = `${this.systemPrompt}\n\nDescribe the content of this image in a short, concise answer. In addition to your main answer, suggest several possible actions or responses the user could take next based on the image. Do not return a structured JSON object, just answer naturally as you would to a user. Be concise and brief.`;
+      
+      const result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            data: imageData.toString("base64"),
+            mimeType: mimeType
+          }
+        }
+      ])
+      const response = await result.response
+      const text = response.text()
+
       return { text, timestamp: Date.now() };
     } catch (error) {
       console.error("Error analyzing image file:", error);
