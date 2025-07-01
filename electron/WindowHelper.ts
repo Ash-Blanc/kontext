@@ -1,4 +1,3 @@
-
 import { BrowserWindow, screen } from "electron"
 import { AppState } from "main"
 import path from "node:path"
@@ -6,7 +5,7 @@ import path from "node:path"
 const isDev = process.env.NODE_ENV === "development"
 
 const startUrl = isDev
-  ? "http://localhost:5180"
+  ? "http://localhost:5173"
   : `file://${path.join(__dirname, "../dist/index.html")}`
 
 export class WindowHelper {
@@ -73,14 +72,16 @@ export class WindowHelper {
     this.screenHeight = workArea.height
 
     this.step = Math.floor(this.screenWidth / 10) // 10 steps
-    this.currentX = 0 // Start at the left
+    this.currentX = Math.floor(this.screenWidth * 0.2) // Center horizontally
+    this.currentY = 0 // Always at the top
 
     const windowSettings: Electron.BrowserWindowConstructorOptions = {
-      height: 600,
-      minWidth: undefined,
+      width: Math.floor(this.screenWidth * 0.6), // 60% of screen width
+      height: 80, // Slim horizontal bar
+      minWidth: 400,
       maxWidth: undefined,
-      x: this.currentX,
-      y: 0,
+      x: Math.floor(this.screenWidth * 0.2), // Center horizontally
+      y: 0, // Always at the top
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: true,
@@ -266,19 +267,74 @@ export class WindowHelper {
   }
 
   public moveWindowUp(): void {
-    if (!this.mainWindow) return
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      const bounds = this.mainWindow.getBounds()
+      const newY = Math.max(0, bounds.y - 50)
+      this.mainWindow.setPosition(bounds.x, newY)
+      this.currentY = newY
+    }
+  }
 
-    const windowHeight = this.windowSize?.height || 0
-    const halfHeight = windowHeight / 2
+  // Window resizing methods
+  public increaseWindowSize(): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
 
-    // Ensure currentX and currentY are numbers
-    this.currentX = Number(this.currentX) || 0
-    this.currentY = Number(this.currentY) || 0
+    const bounds = this.mainWindow.getBounds()
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const workArea = primaryDisplay.workAreaSize
 
-    this.currentY = Math.max(-halfHeight, this.currentY - this.step)
-    this.mainWindow.setPosition(
-      Math.round(this.currentX),
-      Math.round(this.currentY)
-    )
+    // Increase both width and height by 10%
+    const newWidth = Math.min(bounds.width * 1.1, workArea.width * 0.9)
+    const newHeight = Math.min(bounds.height * 1.1, workArea.height * 0.9)
+
+    // Keep window centered when resizing
+    const newX = Math.max(0, bounds.x - (newWidth - bounds.width) / 2)
+    const newY = Math.max(0, bounds.y - (newHeight - bounds.height) / 2)
+
+    this.mainWindow.setBounds({
+      x: Math.floor(newX),
+      y: Math.floor(newY),
+      width: Math.floor(newWidth),
+      height: Math.floor(newHeight)
+    })
+
+    // Update internal state
+    this.windowPosition = { x: Math.floor(newX), y: Math.floor(newY) }
+    this.windowSize = { width: Math.floor(newWidth), height: Math.floor(newHeight) }
+    this.currentX = Math.floor(newX)
+    this.currentY = Math.floor(newY)
+
+    console.log(`Window size increased to: ${Math.floor(newWidth)}x${Math.floor(newHeight)}`)
+  }
+
+  public decreaseWindowSize(): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
+
+    const bounds = this.mainWindow.getBounds()
+
+    // Decrease both width and height by 10%, with minimum sizes
+    const minWidth = 300
+    const minHeight = 200
+    const newWidth = Math.max(bounds.width * 0.9, minWidth)
+    const newHeight = Math.max(bounds.height * 0.9, minHeight)
+
+    // Keep window centered when resizing
+    const newX = bounds.x + (bounds.width - newWidth) / 2
+    const newY = bounds.y + (bounds.height - newHeight) / 2
+
+    this.mainWindow.setBounds({
+      x: Math.floor(newX),
+      y: Math.floor(newY),
+      width: Math.floor(newWidth),
+      height: Math.floor(newHeight)
+    })
+
+    // Update internal state
+    this.windowPosition = { x: Math.floor(newX), y: Math.floor(newY) }
+    this.windowSize = { width: Math.floor(newWidth), height: Math.floor(newHeight) }
+    this.currentX = Math.floor(newX)
+    this.currentY = Math.floor(newY)
+
+    console.log(`Window size decreased to: ${Math.floor(newWidth)}x${Math.floor(newHeight)}`)
   }
 }

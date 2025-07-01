@@ -177,6 +177,14 @@ export class AppState {
     this.windowHelper.moveWindowUp()
   }
 
+  public increaseWindowSize(): void {
+    this.windowHelper.increaseWindowSize()
+  }
+
+  public decreaseWindowSize(): void {
+    this.windowHelper.decreaseWindowSize()
+  }
+
   public setHasDebugged(value: boolean): void {
     this.hasDebugged = value
   }

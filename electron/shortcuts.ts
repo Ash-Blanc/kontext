@@ -1,8 +1,11 @@
 import { globalShortcut, app } from "electron"
 import { AppState } from "./main" // Adjust the import path if necessary
+import { ClaudeModel } from "./LLMHelper"
 
 export class ShortcutsHelper {
   private appState: AppState
+  private lastCmd4Time: number = 0
+  private cmd4TimerThreshold: number = 500 // 500ms window for double press
 
   constructor(appState: AppState) {
     this.appState = appState
@@ -88,6 +91,80 @@ export class ShortcutsHelper {
           }, 100)
         }
       }
+    })
+
+    // Model Selection Shortcuts
+    globalShortcut.register("CommandOrControl+5", () => {
+      console.log("Switching to Claude 3.5 Sonnet...")
+      this.appState.processingHelper.setModel("claude-3-5-sonnet-20241022")
+    })
+
+    globalShortcut.register("CommandOrControl+7", () => {
+      console.log("Switching to Claude 3.7 Sonnet...")
+      this.appState.processingHelper.setModel("claude-3-7-sonnet-20250219")
+    })
+
+    globalShortcut.register("CommandOrControl+4", () => {
+      const currentTime = Date.now()
+      if (currentTime - this.lastCmd4Time < this.cmd4TimerThreshold) {
+        // Double press detected - switch to Opus 4
+        console.log("Switching to Claude Opus 4...")
+        this.appState.processingHelper.setModel("claude-opus-4-20250514")
+        this.lastCmd4Time = 0 // Reset to prevent triple press
+      } else {
+        // Single press - wait for potential double press, then switch to Sonnet 4
+        this.lastCmd4Time = currentTime
+        setTimeout(() => {
+          if (Date.now() - this.lastCmd4Time >= this.cmd4TimerThreshold) {
+            console.log("Switching to Claude Sonnet 4...")
+            this.appState.processingHelper.setModel("claude-sonnet-4-20250514")
+          }
+        }, this.cmd4TimerThreshold)
+      }
+    })
+
+
+
+    globalShortcut.register("CommandOrControl+3", () => {
+      console.log("Switching to Claude 3 Opus...")
+      this.appState.processingHelper.setModel("claude-3-opus-20240229")
+    })
+
+    globalShortcut.register("CommandOrControl+Shift+H", () => {
+      console.log("Switching to Claude 3.5 Haiku...")
+      this.appState.processingHelper.setModel("claude-3-5-haiku-20241022")
+    })
+
+    // Speed Mode Toggle
+    globalShortcut.register("CommandOrControl+Shift+S", () => {
+      console.log("Toggling speed mode...")
+      this.appState.processingHelper.toggleSpeedMode()
+    })
+
+    // Navigation shortcuts for solutions
+    globalShortcut.register("Shift+Up", () => {
+      const mainWindow = this.appState.getMainWindow()
+      if (mainWindow) {
+        mainWindow.webContents.send("scroll-solution", "up")
+      }
+    })
+
+    globalShortcut.register("Shift+Down", () => {
+      const mainWindow = this.appState.getMainWindow()
+      if (mainWindow) {
+        mainWindow.webContents.send("scroll-solution", "down")
+      }
+    })
+
+    // Window resizing shortcuts
+    globalShortcut.register("CommandOrControl+Shift+Up", () => {
+      console.log("Command/Ctrl + Shift + Up pressed. Increasing window size...")
+      this.appState.increaseWindowSize()
+    })
+
+    globalShortcut.register("CommandOrControl+Shift+Down", () => {
+      console.log("Command/Ctrl + Shift + Down pressed. Decreasing window size...")
+      this.appState.decreaseWindowSize()
     })
 
     // Unregister shortcuts when quitting

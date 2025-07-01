@@ -127,6 +127,12 @@ class AppState {
     moveWindowUp() {
         this.windowHelper.moveWindowUp();
     }
+    increaseWindowSize() {
+        this.windowHelper.increaseWindowSize();
+    }
+    decreaseWindowSize() {
+        this.windowHelper.decreaseWindowSize();
+    }
     setHasDebugged(value) {
         this.hasDebugged = value;
     }

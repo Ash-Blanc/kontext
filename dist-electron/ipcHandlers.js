@@ -97,5 +97,26 @@ function initializeIpcHandlers(appState) {
     electron_1.ipcMain.handle("quit-app", () => {
         electron_1.app.quit();
     });
+    electron_1.ipcMain.handle("copy-to-clipboard", async (event, text) => {
+        try {
+            electron_1.clipboard.writeText(text);
+            return { success: true };
+        }
+        catch (error) {
+            console.error("Error copying to clipboard:", error);
+            return { success: false, error: error.message };
+        }
+    });
+    // IPC handler for analyzing error text
+    electron_1.ipcMain.handle("analyze-error-text", async (event, problemInfo, currentCode, errorText) => {
+        try {
+            const result = await appState.processingHelper.getLLMHelper().analyzeErrorText(problemInfo, currentCode, errorText);
+            return result;
+        }
+        catch (error) {
+            console.error("Error in analyze-error-text handler:", error);
+            throw error;
+        }
+    });
 }
 //# sourceMappingURL=ipcHandlers.js.map

@@ -9,7 +9,7 @@ A desktop application to help you cheat on everything.
 ### Prerequisites
 - Make sure you have Node.js installed on your computer
 - Git installed on your computer
-- A Gemini API key (get it from [Google AI Studio](https://makersuite.google.com/app/apikey))
+- A Claude API key (get it from [Anthropic Console](https://console.anthropic.com/))
 
 ### Installation Steps
 
@@ -26,9 +26,9 @@ npm install
 
 3. Set up environment variables:
    - Create a file named `.env` in the root folder
-   - Add your Gemini API key:
+   - Add your Claude API key:
    ```
-   GEMINI_API_KEY=your_api_key_here
+   CLAUDE_API_KEY=your_api_key_here
    ```
    - Save the file
 
@@ -69,10 +69,29 @@ The built app will be in the `release` folder.
      ```
 
 3. **Keyboard Shortcuts**:
-   - `Cmd/Ctrl + B`: Toggle window visibility
-   - `Cmd/Ctrl + H`: Take screenshot
-   - 'Cmd/Enter': Get solution
-   - `Cmd/Ctrl + Arrow Keys`: Move window
+   * `Cmd/Ctrl + H`: Take screenshot
+   * `Cmd/Ctrl + Enter`: Get solution from Claude
+   * `Cmd/Ctrl + B`: Toggle app visibility (hide/show)
+   * `Cmd/Ctrl + Arrow Keys`: Move window around screen
+   * `Cmd/Ctrl + Q`: Quit the application
+   
+   **Model Selection:**
+   * `Cmd/Ctrl + 5`: Switch to Claude 3.5 Sonnet (balanced performance)
+   * `Cmd/Ctrl + 7`: Switch to Claude 3.7 Sonnet (advanced reasoning)
+   * `Cmd/Ctrl + 4`: Switch to Claude Sonnet 4 (latest high-performance)
+   * `Cmd/Ctrl + 4 + 4`: Switch to Claude Opus 4 (double-press - most powerful)
+   * `Cmd/Ctrl + 3`: Switch to Claude 3 Opus (legacy powerful)
+   * `Cmd/Ctrl + Shift + H`: Switch to Claude 3.5 Haiku (fastest)
+   
+   **Performance:**
+   * `Cmd/Ctrl + Shift + S`: Toggle Speed Mode (auto-switch to fastest model)
+   
+   **Window Management:**
+   * `Cmd/Ctrl + Shift + Up`: Increase window size
+   * `Cmd/Ctrl + Shift + Down`: Decrease window size
+   
+   **Solution Navigation:**
+   * `Shift + Up/Down`: Scroll through solution content
 
 ### Troubleshooting
 
@@ -81,6 +100,38 @@ If you see errors:
 2. Delete `package-lock.json`
 3. Run `npm install` again
 4. Try running the app again using Method 1
+
+### Audio Analysis Note
+
+This version uses Claude API which doesn't support direct audio analysis. Audio features will provide general guidance about audio analysis limitations and suggest alternative approaches.
+
+## ⚡ Performance Optimizations
+
+The app includes several optimizations to reduce response times:
+
+### 🚀 Speed Mode
+Press `Cmd/Ctrl + Shift + S` to toggle **Speed Mode**:
+- **Enabled**: Automatically uses Claude 3.5 Haiku (fastest model) with optimized settings
+- **Disabled**: Uses your selected model with standard settings
+
+### 📸 Image Optimization
+- Screenshots are automatically compressed before sending to the API
+- Reduces image size by ~60-80% while maintaining quality
+- Uses JPEG compression at 75% quality for optimal speed/quality balance
+
+### 🎯 Smart Token Limits
+- **Haiku models**: 1024 tokens (fastest)
+- **Sonnet 3.5**: 2048 tokens (balanced)
+- **Other models**: 3072 tokens (detailed)
+
+### 💡 Quick Tips for Better Performance
+1. **Use Speed Mode** (`Cmd+Shift+S`) for faster responses
+2. **Choose the right model**:
+   - Haiku: Fast, good for simple questions
+   - Sonnet: Balanced speed and quality
+   - Opus: Slow but most accurate
+3. **Take smaller screenshots** when possible
+4. **Use concise prompts** for faster processing
 
 ## Contribution
 

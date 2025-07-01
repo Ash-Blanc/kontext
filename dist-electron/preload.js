@@ -111,6 +111,22 @@ electron_1.contextBridge.exposeInMainWorld("electronAPI", {
     analyzeAudioFromBase64: (data, mimeType) => electron_1.ipcRenderer.invoke("analyze-audio-base64", data, mimeType),
     analyzeAudioFile: (path) => electron_1.ipcRenderer.invoke("analyze-audio-file", path),
     analyzeImageFile: (path) => electron_1.ipcRenderer.invoke("analyze-image-file", path),
-    quitApp: () => electron_1.ipcRenderer.invoke("quit-app")
+    analyzeErrorText: (problemInfo, currentCode, errorText) => electron_1.ipcRenderer.invoke("analyze-error-text", problemInfo, currentCode, errorText),
+    copyToClipboard: (text) => electron_1.ipcRenderer.invoke("copy-to-clipboard", text),
+    quitApp: () => electron_1.ipcRenderer.invoke("quit-app"),
+    onModelChanged: (callback) => {
+        const subscription = (_, data) => callback(data);
+        electron_1.ipcRenderer.on("model-changed", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("model-changed", subscription);
+        };
+    },
+    onScrollSolution: (callback) => {
+        const subscription = (_, direction) => callback(direction);
+        electron_1.ipcRenderer.on("scroll-solution", subscription);
+        return () => {
+            electron_1.ipcRenderer.removeListener("scroll-solution", subscription);
+        };
+    },
 });
 //# sourceMappingURL=preload.js.map

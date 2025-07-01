@@ -22,6 +22,7 @@ export interface ElectronAPI {
   moveWindowRight: () => Promise<void>
   analyzeAudioFromBase64: (data: string, mimeType: string) => Promise<{ text: string; timestamp: number }>
   analyzeAudioFile: (path: string) => Promise<{ text: string; timestamp: number }>
+  analyzeErrorText: (problemInfo: any, currentCode: string, errorText: string) => Promise<any>
   quitApp: () => Promise<void>
 }
 

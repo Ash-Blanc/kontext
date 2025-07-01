@@ -22,16 +22,31 @@ import Debug from "./Debug"
 export const ContentSection = ({
   title,
   content,
-  isLoading
+  isLoading,
+  showCopy = false,
+  onCopy
 }: {
   title: string
   content: React.ReactNode
   isLoading: boolean
+  showCopy?: boolean
+  onCopy?: () => void
 }) => (
   <div className="space-y-2">
-    <h2 className="text-[13px] font-medium text-white tracking-wide">
-      {title}
-    </h2>
+    <div className="flex items-center justify-between">
+      <h2 className="text-[13px] font-medium text-white tracking-wide">
+        {title}
+      </h2>
+      {showCopy && onCopy && !isLoading && (
+        <button
+          onClick={onCopy}
+          className="text-xs bg-gray-600 hover:bg-gray-500 text-white px-2 py-1 rounded transition-colors"
+          title="Copy to clipboard"
+        >
+          📋 Copy
+        </button>
+      )}
+    </div>
     {isLoading ? (
       <div className="mt-4 flex">
         <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
@@ -45,19 +60,35 @@ export const ContentSection = ({
     )}
   </div>
 )
+
 const SolutionSection = ({
   title,
   content,
-  isLoading
+  isLoading,
+  showCopy = true,
+  onCopy
 }: {
   title: string
   content: React.ReactNode
   isLoading: boolean
+  showCopy?: boolean
+  onCopy?: () => void
 }) => (
   <div className="space-y-2">
-    <h2 className="text-[13px] font-medium text-white tracking-wide">
-      {title}
-    </h2>
+    <div className="flex items-center justify-between">
+      <h2 className="text-[13px] font-medium text-white tracking-wide">
+        {title}
+      </h2>
+      {showCopy && onCopy && !isLoading && (
+        <button
+          onClick={onCopy}
+          className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded transition-colors"
+          title="Copy solution to clipboard"
+        >
+          📋 Copy
+        </button>
+      )}
+    </div>
     {isLoading ? (
       <div className="space-y-1.5">
         <div className="mt-4 flex">
@@ -130,6 +161,7 @@ interface SolutionsProps {
 const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
   const queryClient = useQueryClient()
   const contentRef = useRef<HTMLDivElement>(null)
+  const [scrollOffset, setScrollOffset] = useState(0)
 
   // Audio recording state
   const [audioRecording, setAudioRecording] = useState(false)
@@ -147,6 +179,8 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
     null
   )
   const [customContent, setCustomContent] = useState<string | null>(null)
+  const [errorText, setErrorText] = useState("")
+  const [showErrorInput, setShowErrorInput] = useState(false)
 
   const [toastOpen, setToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState<ToastMessage>({
@@ -203,6 +237,87 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
       console.error("Error deleting extra screenshot:", error)
     }
   }
+
+  // Handle copy functionality
+  const handleCopy = async (text: string, type: string) => {
+    try {
+      const result = await window.electronAPI.copyToClipboard(text)
+      if (result.success) {
+        showToast("Copied!", `${type} copied to clipboard`, "success")
+      } else {
+        showToast("Copy Failed", "Failed to copy to clipboard", "error")
+      }
+    } catch (error) {
+      console.error("Copy error:", error)
+      showToast("Copy Failed", "Failed to copy to clipboard", "error")
+    }
+  }
+
+  const handleErrorSubmit = async () => {
+    if (!errorText.trim()) {
+      showToast("No Error Text", "Please enter an error message", "error")
+      return
+    }
+
+    setDebugProcessing(true)
+    setShowErrorInput(false)
+
+    try {
+      // Get current problem info and solution
+      const problemInfo = queryClient.getQueryData(["problem_statement"])
+      const currentSolution = queryClient.getQueryData(["solution"]) as {
+        code: string
+        thoughts: string[]
+        time_complexity: string
+        space_complexity: string
+      } | null
+
+      // Send error text for analysis
+      const debugResult = await window.electronAPI.analyzeErrorText(
+        problemInfo,
+        currentSolution?.code || "No current solution",
+        errorText
+      )
+
+      // Update solution cache with debug results
+      if (debugResult && debugResult.solution) {
+        queryClient.setQueryData(["solution"], {
+          code: debugResult.solution.code,
+          thoughts: debugResult.solution.suggested_responses || [],
+          time_complexity: "Error Analysis Complete",
+          space_complexity: "Fixed Solution"
+        })
+      }
+
+      showToast("Analysis Complete", "Error has been analyzed and solution updated", "success")
+      setErrorText("")
+    } catch (error) {
+      console.error("Error analysis failed:", error)
+      showToast("Analysis Failed", "Failed to analyze error message", "error")
+    } finally {
+      setDebugProcessing(false)
+    }
+  }
+
+  // Handle solution scrolling
+  useEffect(() => {
+    const cleanup = window.electronAPI.onScrollSolution((direction: "up" | "down") => {
+      if (contentRef.current) {
+        const scrollAmount = 100
+        const currentScroll = contentRef.current.scrollTop
+        
+        if (direction === "up") {
+          contentRef.current.scrollTop = Math.max(0, currentScroll - scrollAmount)
+        } else {
+          contentRef.current.scrollTop = currentScroll + scrollAmount
+        }
+        
+        setScrollOffset(contentRef.current.scrollTop)
+      }
+    })
+
+    return cleanup
+  }, [])
 
   useEffect(() => {
     // Height update logic
@@ -350,11 +465,20 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
         //we'll set the debug processing state to true and use that to render a little loader
         setDebugProcessing(true)
       }),
-      //the first time debugging works, we'll set the view to debug and populate the cache with the data
+      //the first time debugging works, we'll update the main solution cache
       window.electronAPI.onDebugSuccess((data) => {
         console.log({ debug_data: data })
 
-        queryClient.setQueryData(["new_solution"], data.solution)
+        // Update main solution cache for display in main view
+        if (data.solution) {
+          queryClient.setQueryData(["solution"], {
+            code: data.solution.code,
+            thoughts: data.solution.suggested_responses || [],
+            time_complexity: "Debug Analysis Complete",
+            space_complexity: "Optimized Solution"
+          })
+        }
+        
         setDebugProcessing(false)
       }),
       //when there was an error in the initial debugging, we'll show a toast and stop the little generating pulsing thing.
@@ -445,7 +569,7 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
 
   return (
     <>
-      {!isResetting && queryClient.getQueryData(["new_solution"]) ? (
+      {!isResetting && queryClient.getQueryData(["new_solution"]) && false ? (
         <>
           <Debug
             isProcessing={debugProcessing}
@@ -453,7 +577,7 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
           />
         </>
       ) : (
-        <div ref={contentRef} className="relative space-y-3 px-4 py-3">
+        <div ref={contentRef} className="relative space-y-3 px-4 py-3 max-h-screen overflow-y-auto">
           <Toast
             open={toastOpen}
             onOpenChange={setToastOpen}
@@ -479,6 +603,58 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
             </div>
           )}
 
+          {/* Error Input Section */}
+          {solutionData && (
+            <div className="bg-transparent w-fit mb-3">
+              <div className="space-y-2">
+                {!showErrorInput ? (
+                  <button
+                    onClick={() => setShowErrorInput(true)}
+                    className="px-3 py-1.5 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-md border border-red-500/30 transition-colors"
+                  >
+                    📝 Paste Error Message
+                  </button>
+                ) : (
+                  <div className="bg-black/40 rounded-md p-3 border border-red-500/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs text-red-300">🐛 Error Analysis</span>
+                      <button
+                        onClick={() => {
+                          setShowErrorInput(false)
+                          setErrorText("")
+                        }}
+                        className="text-xs text-gray-400 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <textarea
+                      value={errorText}
+                      onChange={(e) => setErrorText(e.target.value)}
+                      placeholder="Paste your error message here (compilation errors, runtime errors, etc.)"
+                      className="w-full h-20 text-xs bg-black/60 text-white rounded border border-gray-600 p-2 resize-none focus:outline-none focus:border-red-400"
+                    />
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={handleErrorSubmit}
+                        disabled={!errorText.trim() || debugProcessing}
+                        className="px-3 py-1 text-xs bg-red-500 hover:bg-red-600 disabled:bg-gray-600 text-white rounded transition-colors"
+                      >
+                        {debugProcessing ? "Analyzing..." : "Analyze Error"}
+                      </button>
+                      <button
+                        onClick={() => setErrorText("")}
+                        className="px-3 py-1 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded transition-colors"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Navbar of commands with the SolutionsHelper */}
           <SolutionCommands
             extraScreenshots={extraScreenshots}
@@ -495,6 +671,8 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
                     title={problemStatementData?.output_format?.subtype === "voice" ? "Audio Result" : "Screenshot Result"}
                     content={problemStatementData.problem_statement}
                     isLoading={false}
+                    showCopy={true}
+                    onCopy={() => handleCopy(problemStatementData.problem_statement, "problem statement")}
                   />
                 ) : (
                   <>
@@ -503,6 +681,8 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
                       title={problemStatementData?.output_format?.subtype === "voice" ? "Voice Input" : "Problem Statement"}
                       content={problemStatementData?.problem_statement}
                       isLoading={!problemStatementData}
+                      showCopy={true}
+                      onCopy={() => handleCopy(problemStatementData?.problem_statement, "problem statement")}
                     />
                     {/* Show loading state when waiting for solution */}
                     {problemStatementData && !solutionData && (
@@ -537,11 +717,15 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
                             )
                           }
                           isLoading={!thoughtsData}
+                          showCopy={true}
+                          onCopy={() => handleCopy(thoughtsData?.join("\n"), "analysis")}
                         />
                         <SolutionSection
                           title={problemStatementData?.output_format?.subtype === "voice" ? "Response" : "Solution"}
                           content={solutionData}
                           isLoading={!solutionData}
+                          showCopy={true}
+                          onCopy={() => handleCopy(solutionData, "solution")}
                         />
                         {problemStatementData?.output_format?.subtype !== "voice" && (
                           <ComplexitySection

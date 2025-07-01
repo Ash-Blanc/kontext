@@ -1,7 +1,7 @@
 // ProcessingHelper.ts
 
 import { AppState } from "./main"
-import { LLMHelper } from "./LLMHelper"
+import { LLMHelper, ClaudeModel } from "./LLMHelper"
 import dotenv from "dotenv"
 
 dotenv.config()
@@ -18,9 +18,9 @@ export class ProcessingHelper {
 
   constructor(appState: AppState) {
     this.appState = appState
-    const apiKey = process.env.GEMINI_API_KEY
+    const apiKey = process.env.CLAUDE_API_KEY
     if (!apiKey) {
-      throw new Error("GEMINI_API_KEY not found in environment variables")
+      throw new Error("CLAUDE_API_KEY not found in environment variables")
     }
     this.llmHelper = new LLMHelper(apiKey)
   }
@@ -56,25 +56,32 @@ export class ProcessingHelper {
         }
       }
 
-      // NEW: Handle screenshot as plain text (like audio)
+      // Process screenshots with Claude API
+      console.log("[ProcessingHelper] Starting screenshot processing with Claude...");
       mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_START)
       this.appState.setView("solutions")
       this.currentProcessingAbortController = new AbortController()
+      
       try {
-        const imageResult = await this.llmHelper.analyzeImageFile(lastPath);
-        const problemInfo = {
-          problem_statement: imageResult.text,
-          input_format: { description: "Generated from screenshot", parameters: [] as any[] },
-          output_format: { description: "Generated from screenshot", type: "string", subtype: "text" },
-          complexity: { time: "N/A", space: "N/A" },
-          test_cases: [] as any[],
-          validation_type: "manual",
-          difficulty: "custom"
-        };
+        // Step 1: Extract problem from images
+        console.log("[ProcessingHelper] Extracting problem from screenshots...");
+        const problemInfo = await this.llmHelper.extractProblemFromImages(allPaths);
+        console.log("[ProcessingHelper] Problem extracted:", problemInfo);
+        
+        // Send problem extracted event
         mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.PROBLEM_EXTRACTED, problemInfo);
         this.appState.setProblemInfo(problemInfo);
+        
+        // Step 2: Generate solution based on the extracted problem
+        console.log("[ProcessingHelper] Generating solution...");
+        const solutionResult = await this.llmHelper.generateSolution(problemInfo);
+        console.log("[ProcessingHelper] Solution generated:", solutionResult);
+        
+        // Send solution success event
+        mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.SOLUTION_SUCCESS, solutionResult);
+        
       } catch (error: any) {
-        console.error("Image processing error:", error)
+        console.error("[ProcessingHelper] Error processing screenshots:", error)
         mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR, error.message)
       } finally {
         this.currentProcessingAbortController = null
@@ -99,9 +106,29 @@ export class ProcessingHelper {
           throw new Error("No problem info available")
         }
 
-        // Get current solution from state
-        const currentSolution = await this.llmHelper.generateSolution(problemInfo)
-        const currentCode = currentSolution.solution.code
+        // Try to get current solution from cache first, then generate if needed
+        let currentCode = "No previous solution available"
+        try {
+          // Get the last solution from the main window cache
+          const cachedSolution = await new Promise((resolve) => {
+            mainWindow.webContents.executeJavaScript(`
+              window.queryClient?.getQueryData(["solution"])
+            `).then(resolve).catch(() => resolve(null))
+          })
+          
+          if (cachedSolution && typeof cachedSolution === 'object' && 'code' in cachedSolution) {
+            currentCode = (cachedSolution as any).code
+            console.log("[ProcessingHelper] Using cached solution for debug")
+          } else {
+            console.log("[ProcessingHelper] No cached solution, generating new one for debug")
+            const currentSolution = await this.llmHelper.generateSolution(problemInfo)
+            currentCode = currentSolution.solution.code
+          }
+        } catch (error) {
+          console.log("[ProcessingHelper] Error getting cached solution, generating new one:", error)
+          const currentSolution = await this.llmHelper.generateSolution(problemInfo)
+          currentCode = currentSolution.solution.code
+        }
 
         // Debug the solution using vision model
         const debugResult = await this.llmHelper.debugSolutionWithImages(
@@ -111,10 +138,20 @@ export class ProcessingHelper {
         )
 
         this.appState.setHasDebugged(true)
+        
+        // Send both debug success and solution success events for consistent UI
         mainWindow.webContents.send(
           this.appState.PROCESSING_EVENTS.DEBUG_SUCCESS,
           debugResult
         )
+        
+        // Also send as regular solution for consistent display
+        if (debugResult && debugResult.solution) {
+          mainWindow.webContents.send(
+            this.appState.PROCESSING_EVENTS.SOLUTION_SUCCESS,
+            debugResult
+          )
+        }
 
       } catch (error: any) {
         console.error("Debug processing error:", error)
@@ -154,5 +191,45 @@ export class ProcessingHelper {
 
   public getLLMHelper() {
     return this.llmHelper;
+  }
+
+  public setModel(model: ClaudeModel): void {
+    this.llmHelper.setModel(model)
+    const mainWindow = this.appState.getMainWindow()
+    if (mainWindow) {
+      mainWindow.webContents.send("model-changed", {
+        model: model,
+        displayName: this.llmHelper.getModelDisplayName(model)
+      })
+    }
+  }
+
+  public enableSpeedMode(): void {
+    console.log("[ProcessingHelper] Enabling speed mode - switching to Claude 3.5 Haiku")
+    this.setModel("claude-3-5-haiku-20241022")
+    this.llmHelper.setSpeedMode(true)
+  }
+
+  public disableSpeedMode(): void {
+    console.log("[ProcessingHelper] Disabling speed mode - switching to Claude 3.5 Sonnet")
+    this.setModel("claude-3-5-sonnet-20241022")
+    this.llmHelper.setSpeedMode(false)
+  }
+
+  public toggleSpeedMode(): void {
+    const currentModel = this.getCurrentModel()
+    if (currentModel.includes('haiku')) {
+      this.disableSpeedMode()
+    } else {
+      this.enableSpeedMode()
+    }
+  }
+
+  public getCurrentModel(): ClaudeModel {
+    return this.llmHelper.getCurrentModel()
+  }
+
+  public getModelDisplayName(): string {
+    return this.llmHelper.getModelDisplayName()
   }
 }

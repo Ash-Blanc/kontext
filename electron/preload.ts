@@ -25,12 +25,16 @@ interface ElectronAPI {
 
   onUnauthorized: (callback: () => void) => () => void
   onDebugError: (callback: (error: string) => void) => () => void
+  onModelChanged: (callback: (data: { model: string; displayName: string }) => void) => () => void
+  onScrollSolution: (callback: (direction: "up" | "down") => void) => () => void
   takeScreenshot: () => Promise<void>
   moveWindowLeft: () => Promise<void>
   moveWindowRight: () => Promise<void>
   analyzeAudioFromBase64: (data: string, mimeType: string) => Promise<{ text: string; timestamp: number }>
   analyzeAudioFile: (path: string) => Promise<{ text: string; timestamp: number }>
   analyzeImageFile: (path: string) => Promise<void>
+  analyzeErrorText: (problemInfo: any, currentCode: string, errorText: string) => Promise<void>
+  copyToClipboard: (text: string) => Promise<void>
   quitApp: () => Promise<void>
 }
 
@@ -162,8 +166,29 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   moveWindowLeft: () => ipcRenderer.invoke("move-window-left"),
   moveWindowRight: () => ipcRenderer.invoke("move-window-right"),
-  analyzeAudioFromBase64: (data: string, mimeType: string) => ipcRenderer.invoke("analyze-audio-base64", data, mimeType),
-  analyzeAudioFile: (path: string) => ipcRenderer.invoke("analyze-audio-file", path),
-  analyzeImageFile: (path: string) => ipcRenderer.invoke("analyze-image-file", path),
-  quitApp: () => ipcRenderer.invoke("quit-app")
+  analyzeAudioFromBase64: (data: string, mimeType: string) =>
+    ipcRenderer.invoke("analyze-audio-base64", data, mimeType),
+  analyzeAudioFile: (path: string) =>
+    ipcRenderer.invoke("analyze-audio-file", path),
+  analyzeImageFile: (path: string) =>
+    ipcRenderer.invoke("analyze-image-file", path),
+  analyzeErrorText: (problemInfo: any, currentCode: string, errorText: string) =>
+    ipcRenderer.invoke("analyze-error-text", problemInfo, currentCode, errorText),
+  copyToClipboard: (text: string) =>
+    ipcRenderer.invoke("copy-to-clipboard", text),
+  quitApp: () => ipcRenderer.invoke("quit-app"),
+  onModelChanged: (callback: (data: { model: string; displayName: string }) => void) => {
+    const subscription = (_: any, data: { model: string; displayName: string }) => callback(data)
+    ipcRenderer.on("model-changed", subscription)
+    return () => {
+      ipcRenderer.removeListener("model-changed", subscription)
+    }
+  },
+  onScrollSolution: (callback: (direction: "up" | "down") => void) => {
+    const subscription = (_: any, direction: "up" | "down") => callback(direction)
+    ipcRenderer.on("scroll-solution", subscription)
+    return () => {
+      ipcRenderer.removeListener("scroll-solution", subscription)
+    }
+  },
 } as ElectronAPI)

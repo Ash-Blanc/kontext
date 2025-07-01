@@ -4,6 +4,7 @@ import { ToastViewport } from "@radix-ui/react-toast"
 import { useEffect, useRef, useState } from "react"
 import Solutions from "./_pages/Solutions"
 import { QueryClient, QueryClientProvider } from "react-query"
+import ModelIndicator from "./components/ui/ModelIndicator"
 
 declare global {
   interface Window {
@@ -46,6 +47,11 @@ declare global {
       moveWindowLeft: () => Promise<void>
       moveWindowRight: () => Promise<void>
       quitApp: () => Promise<void>
+      copyToClipboard: (text: string) => Promise<void>
+
+      // Model change event
+      onModelChanged: (callback: (data: { model: string; displayName: string }) => void) => () => void
+      onScrollSolution: (callback: (direction: "up" | "down") => void) => () => void
     }
   }
 }
@@ -61,6 +67,7 @@ const queryClient = new QueryClient({
 
 const App: React.FC = () => {
   const [view, setView] = useState<"queue" | "solutions" | "debug">("queue")
+  const [currentModel, setCurrentModel] = useState<string>("Claude 3.5 Sonnet")
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Effect for height monitoring
@@ -147,13 +154,19 @@ const App: React.FC = () => {
           queryClient.invalidateQueries(["problem_statement"])
           queryClient.setQueryData(["problem_statement"], data)
         }
+      }),
+      // Handle model changes
+      window.electronAPI.onModelChanged((data: { model: string; displayName: string }) => {
+        console.log("Model changed to:", data.displayName)
+        setCurrentModel(data.displayName)
       })
     ]
     return () => cleanupFunctions.forEach((cleanup) => cleanup())
   }, [])
 
   return (
-    <div ref={containerRef} className="min-h-0">
+    <div ref={containerRef} className="min-h-0 relative">
+      <ModelIndicator currentModel={currentModel} />
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           {view === "queue" ? (

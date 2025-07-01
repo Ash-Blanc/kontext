@@ -1,6 +1,6 @@
 // ipcHandlers.ts
 
-import { ipcMain, app } from "electron"
+import { ipcMain, app, clipboard } from "electron"
 import { AppState } from "./main"
 
 export function initializeIpcHandlers(appState: AppState): void {
@@ -105,5 +105,30 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   ipcMain.handle("quit-app", () => {
     app.quit()
+  })
+
+  ipcMain.handle("copy-to-clipboard", async (event, text: string) => {
+    try {
+      clipboard.writeText(text)
+      return { success: true }
+    } catch (error: any) {
+      console.error("Error copying to clipboard:", error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // IPC handler for analyzing error text
+  ipcMain.handle("analyze-error-text", async (event, problemInfo: any, currentCode: string, errorText: string) => {
+    try {
+      const result = await appState.processingHelper.getLLMHelper().analyzeErrorText(
+        problemInfo,
+        currentCode,
+        errorText
+      )
+      return result
+    } catch (error: any) {
+      console.error("Error in analyze-error-text handler:", error)
+      throw error
+    }
   })
 }
