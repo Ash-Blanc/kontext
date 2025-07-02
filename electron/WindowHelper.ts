@@ -36,14 +36,14 @@ export class WindowHelper {
     const primaryDisplay = screen.getPrimaryDisplay()
     const workArea = primaryDisplay.workAreaSize
 
-    // Use 75% width if debugging has occurred, otherwise use 60%
+    // Use 90% width if debugging has occurred, otherwise use 75%
     const maxAllowedWidth = Math.floor(
-      workArea.width * (this.appState.getHasDebugged() ? 0.75 : 0.5)
+      workArea.width * (this.appState.getHasDebugged() ? 0.9 : 0.75)
     )
 
     // Ensure width doesn't exceed max allowed width and height is reasonable
-    const newWidth = Math.min(width + 32, maxAllowedWidth)
-    const newHeight = Math.ceil(height)
+    const newWidth = Math.min(Math.max(width + 32, 500), maxAllowedWidth)
+    const newHeight = Math.max(Math.ceil(height), 150)
 
     // Center the window horizontally if it would go off screen
     const maxX = workArea.width - newWidth
@@ -76,11 +76,12 @@ export class WindowHelper {
     this.currentY = 0 // Always at the top
 
     const windowSettings: Electron.BrowserWindowConstructorOptions = {
-      width: Math.floor(this.screenWidth * 0.6), // 60% of screen width
-      height: 80, // Slim horizontal bar
-      minWidth: 400,
+      width: Math.floor(this.screenWidth * 0.7), // 70% of screen width  
+      height: 200, // Reasonable starting height
+      minWidth: 500,
+      minHeight: 150,
       maxWidth: undefined,
-      x: Math.floor(this.screenWidth * 0.2), // Center horizontally
+      x: Math.floor(this.screenWidth * 0.15), // Center horizontally
       y: 0, // Always at the top
       webPreferences: {
         nodeIntegration: true,

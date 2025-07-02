@@ -27,7 +27,7 @@ const ScreenshotItem: React.FC<ScreenshotItemProps> = ({
   return (
     <>
       <div
-        className={`border border-white relative ${isLoading ? "" : "group"}`}
+        className={`border border-white relative aspect-video ${isLoading ? "" : "group"}`}
       >
         <div className="w-full h-full relative">
           {isLoading && (
